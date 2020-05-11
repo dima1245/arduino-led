@@ -1,0 +1,1154 @@
+#include "Arduino.h"
+#include <FastLED.h>
+#include <TimeLib.h>
+#include <TimeAlarms.h>
+#include <Wire.h>
+#include <DS1302RTC.h>
+#include <IRremote.h>
+FASTLED_USING_NAMESPACE
+#define DATA_PIN    5
+#define LED_TYPE    WS2812
+#define COLOR_ORDER GRB
+#define NUM_LEDS    401
+DS1302RTC RTC(9, 10, 11);
+CRGB leds[NUM_LEDS];
+#define Brightness         125
+#define FRAMES_PER_SECOND  120
+#define UPDATES_PER_SECOND 120
+uint8_t FastLED_fade_counter = 0;
+uint8_t fadecounter = 4;
+uint8_t fadetimer = 0;
+uint8_t currentMillis = 0;
+uint8_t ircount = 1;
+uint8_t bright = 5;
+uint8_t indlight = 0;
+uint8_t hueset = 0;
+uint8_t millise = 20;
+uint8_t startIndex = 0;
+uint8_t offtimer = 0;
+long interval = 3000;
+int irledloop;
+int whatToDo;
+int RECV_PIN = 7;
+long previousMillis = 0;
+long int ledz[ ] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255,256,257,258,259,260,261,262,263,264,265,266,267,268,269,270,271,272,273,274,275,276,277,278,279,280,281,282,283,284,285,286,287,288,289,290,291,292,293,294,295,296,297,298,299,300,301,302,303,304,305,306,307,308,309,310,311,312,313,314,315,316,317,318,319,320,321,322,323,324,325,326,327,328,329,330,331,332,333,334,335,336,337,338,339,340,341,342,343,344,345,346,347,348,349,350,351,352,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,368,369,370,371,372,373,374,375,376,377,378,379,380,381,382,383,384,385,386,387,388,389,390,391,392,393,394,395,396,397,398,399,400,401};
+int j;
+decode_results results;
+IRrecv irrecv(RECV_PIN);
+CRGBPalette16 currentPalette;
+TBlendType    currentBlending;
+extern CRGBPalette16 myRedWhiteBluePalette;
+extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
+tmElements_t tm;
+void setup() {
+  Serial.begin(9600);
+  Serial1.begin(9600);
+  setSyncProvider(RTC.get);
+  setTime(tm.Hour,tm.Minute,tm.Second,tm.Month,tm.Day,tm.Year);
+  Alarm.alarmRepeat(18,58,00, OneAlarm);
+  irrecv.enableIRIn();
+  FastLED.addLeds<LED_TYPE,DATA_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.setBrightness(Brightness);
+  currentPalette = RainbowColors_p;
+  currentBlending = LINEARBLEND;
+  irledloop = '0';
+  Serial.println("Set up complete");
+}
+uint8_t gHue = 0;
+uint8_t gHuee = 0;
+
+void loop() { 
+  choose();
+  sequenceChooser();
+  FastLED.delay(1000/FRAMES_PER_SECOND); 
+  EVERY_N_MILLISECONDS( millise ) { gHue++; } 
+   setSyncProvider(RTC.get); 
+   (! RTC.read(tm));
+  Alarm.delay(1);
+  fadeall();
+  irwork();
+  irloop();
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis > interval) { 
+    offtimer = 1;
+   
+    offtimer = 0;
+    previousMillis = currentMillis; 
+}
+}
+char data = (char) Serial1.read();
+
+void(* resetFunc) (void) = 0;
+
+void irwork(){
+ if ( (irrecv.decode(&results)) && (ircount == 1) ){
+  ircount = 2;
+  irrecv.resume();
+  delay(1000);
+ }
+
+ if ( (irrecv.decode(&results)) && (ircount == 2) || offtimer == 1){
+   long int deCode = results.value;
+    switch (results.value) {
+      
+      case 16726215:
+      FastLED.clear();
+      fadecounter = 4;
+        break;
+        
+      case 16753245:
+        whatToDo = '0';
+        fill_solid(leds, NUM_LEDS, CRGB::White);
+        FastLED.show();
+         break;
+         
+       case 16769565: // warmest white
+        whatToDo = '0';
+        fill_solid(leds, NUM_LEDS, CRGB(255, 147, 41));;
+        break;
+
+       case 16736925:
+         whatToDo = '0'; //warm white
+         fill_solid(leds, NUM_LEDS, CRGB(255, 197, 143));
+         break;
+
+       case 16720605:
+         whatToDo = '4'; //confetti
+         break;
+
+       case 16712445:
+         whatToDo = 'g'; //solid rainbow
+         break;
+
+       case 16761405:
+         whatToDo = '1'; //Rainbow
+         break;
+
+       case 16769055:
+         whatToDo = '5'; //rainbow line
+         break;
+
+       case 16754775:
+         whatToDo = 'c'; //cyan and white
+         break;
+
+       case 16748655:
+         whatToDo = 'f'; //pulsing black
+         break;
+
+       case 16738455:
+          whatToDo = '0';
+          fill_solid(leds, NUM_LEDS, CRGB::Red);
+          FastLED.show();
+          break;
+
+       case 16750695:
+         whatToDo = 'h'; //black stripe
+         break;
+
+       case 16756815:
+         whatToDo = '0';
+         fill_solid(leds, NUM_LEDS, CRGB::Blue);
+         FastLED.show();
+         break;
+
+       case 16718055:
+       bright ++;
+         if (bright == 1){
+         FastLED.setBrightness(25.5);
+         blackleds();
+         led0();
+         led1();
+         FastLED.show();
+         }
+         if (bright == 2){
+         FastLED.setBrightness(51);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         FastLED.show();
+         }
+         if (bright == 3){
+         FastLED.setBrightness(76.5);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         FastLED.show();
+         }
+         if (bright == 4){
+         FastLED.setBrightness(102);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         FastLED.show();
+         }
+         if (bright == 5){
+         FastLED.setBrightness(127.5);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         FastLED.show();
+         }
+         if (bright == 6){
+         FastLED.setBrightness(153);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         led6();
+         FastLED.show();
+         }
+         if (bright == 7){
+         FastLED.setBrightness(178.5);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         led6();
+         led7();
+         FastLED.show();
+         }
+         if (bright == 8){
+         FastLED.setBrightness(204);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         led6();
+         led7();
+         led8();
+         FastLED.show();
+         }
+         if (bright == 9){
+         FastLED.setBrightness(229.5);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         led6();
+         led7();
+         led8();
+         led9();
+         FastLED.show();
+         }
+         if (bright == 10){
+         FastLED.setBrightness(255);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         led6();
+         led7();
+         led8();
+         led9();
+         led10();
+         FastLED.show();
+         }
+         if (bright > 10)
+          bright = 10;
+         break;
+
+       case 16730805:
+       bright --;
+         if (bright == 1){
+         FastLED.setBrightness(25.5);
+         blackleds();
+         led0();
+         led1();
+         FastLED.show();
+         }
+         if (bright == 2){
+         FastLED.setBrightness(51);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         FastLED.show();
+         }
+         if (bright == 3){
+         FastLED.setBrightness(76.5);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         FastLED.show();
+         }
+         if (bright == 4){
+         FastLED.setBrightness(102);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         FastLED.show();
+         }
+         if (bright == 5){
+         FastLED.setBrightness(127.5);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         FastLED.show();
+         }
+         if (bright == 6){
+         FastLED.setBrightness(153);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         led6();
+         FastLED.show();
+         }
+         if (bright == 7){
+         FastLED.setBrightness(178.5);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         led6();
+         led7();
+         FastLED.show();
+         }
+         if (bright == 8){
+         FastLED.setBrightness(204);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         led6();
+         led7();
+         led8();
+         FastLED.show();
+         }
+         if (bright == 9){
+         FastLED.setBrightness(229.5);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         led6();
+         led7();
+         led8();
+         led9();
+         FastLED.show();
+         }
+         if (bright == 10){
+         FastLED.setBrightness(255);
+         blackleds();
+         led0();
+         led1();
+         led2();
+         led3();
+         led4();
+         led5();
+         led6();
+         led7();
+         led8();
+         led9();
+         led10();
+         FastLED.show();
+         }
+         if (bright < 1)
+          bright = 1;
+         break;
+
+       case 16716015:
+       hueset --;
+          if (hueset == 1){
+         millise = 1;
+         irledloop = '0';
+         }
+         if (hueset == 2){
+         millise = 5;
+          irledloop = '1';
+         }
+         if (hueset == 3){
+         millise = 10;
+          irledloop = '2';
+         }
+         if (hueset == 4){
+         millise = 15;
+          irledloop = '3';
+         }
+         if (hueset == 5){
+         millise = 20;
+          irledloop = '4';
+         }
+         if (hueset == 6){
+         millise = 25;
+          irledloop = '5';
+         }
+         if (hueset == 7){
+         millise = 30;
+          irledloop = '6';
+         }
+         if (hueset == 8){
+         millise = 35;
+          irledloop = '7';
+         }
+         if (hueset == 9){
+         millise = 40;
+          irledloop = '8';
+         }
+         if (hueset == 10){
+         millise = 45;
+          irledloop = '9';
+         }
+         if (hueset < 1)
+          hueset = 1;
+         break;
+
+     case 16734885:
+       hueset ++;
+         if (hueset == 1){
+         millise = 1;
+         irledloop = '0';
+         }
+         if (hueset == 2){
+         millise = 5;
+          irledloop = '1';
+         }
+         if (hueset == 3){
+         millise = 10;
+          irledloop = '2';
+         }
+         if (hueset == 4){
+         millise = 15;
+          irledloop = '3';
+         }
+         if (hueset == 5){
+         millise = 20;
+          irledloop = '4';
+         }
+         if (hueset == 6){
+         millise = 25;
+          irledloop = '5';
+         }
+         if (hueset == 7){
+         millise = 30;
+          irledloop = '6';
+         }
+         if (hueset == 8){
+         millise = 35;
+          irledloop = '7';
+         }
+         if (hueset == 9){
+         millise = 40;
+          irledloop = '8';
+         }
+         if (hueset == 10){
+         millise = 45;
+          irledloop = '9';
+         }
+         if (hueset > 10)
+          hueset = 10;
+         break;
+ 
+    }
+  ircount = 1;
+  irrecv.resume();
+ }
+}
+
+void led0(){
+  leds[100] = CRGB::Cyan; leds[104] = CRGB::Cyan; leds[108] = CRGB::Cyan; leds[112] = CRGB::Cyan; leds[116] = CRGB::Cyan; leds[120] = CRGB::Green; leds[124] = CRGB::Cyan; leds[128] = CRGB::Cyan; leds[132] = CRGB::Yellow; leds[136] = CRGB::Orange; leds[140] = CRGB::Red;
+}
+void led1(){
+  leds[101] = CRGB::White;
+  leds[102] = CRGB::White;
+  leds[103] = CRGB::White;
+}
+void led2(){
+  leds[105] = CRGB::White;
+  leds[106] = CRGB::White;
+  leds[107] = CRGB::White;
+}
+void led3(){
+  leds[109] = CRGB::White;
+  leds[110] = CRGB::White;
+  leds[111] = CRGB::White;
+}
+void led4(){
+  leds[113] = CRGB::White;
+  leds[114] = CRGB::White;
+  leds[115] = CRGB::White;
+}
+void led5(){
+  leds[117] = CRGB::White;
+  leds[118] = CRGB::White;
+  leds[119] = CRGB::White;
+}
+void led6(){
+  leds[121] = CRGB::White;
+  leds[122] = CRGB::White;
+  leds[123] = CRGB::White;
+}
+void led7(){
+  leds[125] = CRGB::White;
+  leds[126] = CRGB::White;
+  leds[127] = CRGB::White;
+}
+void led8(){
+  leds[129] = CRGB::White;
+  leds[130] = CRGB::White;
+  leds[131] = CRGB::White;
+}
+void led9(){
+  leds[133] = CRGB::White;
+  leds[134] = CRGB::White;
+  leds[135] = CRGB::White;
+}
+void led10(){
+  leds[137] = CRGB::White;
+  leds[138] = CRGB::White;
+  leds[139] = CRGB::White;
+}
+void blackleds(){
+    for (j = 0; j < 450; j++)
+  leds[ledz[j] ] = CRGB::Black;
+  FastLED.show();
+}
+
+void irloop(){
+  switch (irledloop){
+
+    case '0':
+    startIndex = startIndex + 1;
+    break;
+
+     case '1':
+    startIndex = startIndex + 2;
+    break;
+
+     case '2':
+    startIndex = startIndex + 3;
+    break;
+
+     case '3':
+    startIndex = startIndex + 4;
+    break;
+
+     case '4':
+    startIndex = startIndex + 5;
+    break;
+
+     case '5':
+    startIndex = startIndex + 6;
+    break;
+
+     case '6':
+    startIndex = startIndex + 7;
+    break;
+
+     case '7':
+    startIndex = startIndex + 8;
+    break;
+
+     case '8':
+    startIndex = startIndex + 9;
+    break;
+
+     case '9':
+    startIndex = startIndex + 10;
+    break;
+    
+  }
+}
+
+void fadeall(){
+  if (fadecounter == 1) {  
+    FastLED.setBrightness(100);
+    for (int i = 0; i<NUM_LEDS; i++){
+      leds[i] = CRGB::White;
+      leds[i].maximizeBrightness(FastLED_fade_counter);
+   }
+      FastLED_fade_counter ++ ;
+      FastLED.show();
+   if (FastLED_fade_counter > 254){
+      fadecounter = 2;
+   }
+  }
+   if (fadecounter == 2) {
+    fill_solid(leds, NUM_LEDS, CRGB::White);
+    fadetimer ++;
+    if (fadetimer == 4777) {
+      fadecounter = 3;
+      fadetimer = 0;
+    }
+   }
+  if (fadecounter == 3){
+    for (int i = 0; i<NUM_LEDS; i++){
+      leds[i] = CRGB::White;
+      leds[i].maximizeBrightness(FastLED_fade_counter);
+   }
+      FastLED_fade_counter -- ;
+      FastLED.show();
+      if (FastLED_fade_counter == 1)
+      fadecounter = 4;
+  }
+   
+}
+
+void ircontrol(){
+     long int deCode = results.value;
+     Serial.println(results.value, HEX);
+    switch (results.value) {
+      
+    case 16726215:
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Black);
+      FastLED.show();
+      Serial1.print("Leds Off");
+      break;
+      
+    case 16753245:
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Cyan);
+      FastLED.show();
+      Serial1.print("Leds Off");
+      break;
+}
+}
+
+void choose(){
+  
+  if ((Serial1.available() > 0) ||   offtimer == 1){
+
+char data = (char) Serial1.read();
+    
+    switch (data) {
+      
+    case '0':
+      fadecounter = 4;
+      FastLED.clear();
+      whatToDo = '0';
+      Serial1.print("Leds Off");
+      break;
+    case '1':
+      FastLED.setBrightness(25.5);
+      Serial1.print("10%");
+      break;
+    case '2':
+     FastLED.setBrightness(51);
+     Serial1.print("20%");
+      break;
+    case '3':
+     FastLED.setBrightness(76.5);
+     Serial1.print("30%");
+      break;
+    case '4':
+      FastLED.setBrightness(102);
+      Serial1.print("40%");
+      break;
+    case '5':
+      FastLED.setBrightness(127.5);
+      Serial1.print("50%");
+      break;
+    case '6':
+      FastLED.setBrightness(153);
+      Serial1.print("60%");
+      break;
+    case '7':
+      FastLED.setBrightness(178.5);
+      Serial1.print("70%");
+      break;
+    case '8':
+     FastLED.setBrightness(204);
+     Serial1.print("80%");
+      break;
+    case '9':
+      FastLED.setBrightness(229.5);
+      Serial1.print("90%");
+      break;
+    case 'a':
+     FastLED.setBrightness(255);
+     Serial1.print("100%");
+      break;
+    case 'b':
+      FastLED.setBrightness(200);
+      whatToDo = '3';
+      Serial1.print("not used");
+      break;
+    case 'c':
+      whatToDo = '4';
+      Serial1.print("Confetti");
+      break;
+    case 'd':
+      whatToDo = '5';
+      Serial1.print("Rainbow Line");
+      break;
+    case 'e':
+      whatToDo = '6';
+      Serial1.print("BPM");
+      break;
+    case 'f':
+      whatToDo = '7';
+      Serial1.print("Juggle");
+      break;
+    case 'g':
+      whatToDo = '8';
+      Serial1.print("Rainbow Seizure");
+      break;
+    case 'h':
+      whatToDo = '9';
+      Serial1.print("Black & White Palette");
+      break;
+    case 'i':
+      whatToDo = 'a';
+      Serial1.print("Purple & Green Palette");
+      break;
+    case 'j':
+      whatToDo = 'c';
+      Serial1.print("White & Cyan Connected");
+      break;
+    case 'k':
+      whatToDo = 'b';
+      Serial1.print("White & Cyan Dis-Connected");
+      break;
+    case 'l':
+      whatToDo = 'd';
+      Serial1.print("White Dash");
+      break;
+    case 'm':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Red);
+      Serial1.print("Red");
+      FastLED.show();
+      break;
+    case 'n':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Green);
+      Serial.print("green");
+      FastLED.show();
+      break;
+    case 'o':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Blue);
+      Serial1.print("Blue");
+      FastLED.show();
+      break;
+    case 'p':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Orange);
+      Serial1.print("Orange");
+      FastLED.show();
+      break;
+    case 'q':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Cyan);
+      Serial1.print("Cyan");
+      FastLED.show();
+      break;
+    case 'r':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Purple);
+      Serial1.print("Purple");
+      FastLED.show();
+      break;
+    case 's':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::White);
+      Serial1.print("White");
+      FastLED.show();
+      break;
+    case 't':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Maroon);
+      Serial1.print("Maroon");
+      break;
+    case 'u':
+      whatToDo = '1';
+      Serial1.print("Rainbow");
+      break;
+    case 'v':
+      whatToDo = '2';
+      Serial1.print("Rainbow w/ Glitter");
+      break;
+    case 'w':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Brown);
+      Serial1.print("Brown");
+      FastLED.show();
+      break;
+    case 'x':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Teal);
+      Serial1.print("Teal");
+      FastLED.show();
+      break;
+    case 'y':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Navy);
+      Serial1.print("Navy");
+      FastLED.show();
+      break;
+    case 'z':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB(255, 197, 143));
+      Serial1.print("2600k");
+      break;
+    case '!':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB::Grey);
+      Serial1.print("Grey");
+      FastLED.show();
+      break;
+    case '@':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB(255, 214, 170));
+      Serial1.print("2850k");
+      FastLED.show();
+      break;
+    case '#':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB(255, 241, 224));
+      Serial1.print("3200k");
+      FastLED.show();
+      break;
+    case '$':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB(255, 250, 244));
+      Serial1.print("5200k");
+      break;
+    case '%':
+       whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB(255, 255, 251));
+      Serial1.print("5400k");
+      FastLED.show();
+      break;
+    case '^':
+      whatToDo = '0';
+      fill_solid(leds, NUM_LEDS, CRGB(255, 147, 41));;
+      Serial1.print("1900k");
+      break;
+    case '&':
+      whatToDo = 'e';
+      Serial1.print("Pulsing White");
+      break;
+    case '*':
+      whatToDo = 'f';
+      Serial1.print("Pulsing Black");
+      break;
+    case '(':
+      whatToDo = 'g';
+      Serial1.print("Solid Rainbow");
+      break;
+    case ')':
+      whatToDo = 'h';
+      Serial1.print("Black Stripe");
+      break;
+    case '-':
+      Serial1.print("Wall Rainbow (Not Yet Implemented)");
+      break;
+    case '=':
+      Serial1.print("Room Light(Not Yet Implemented)");
+      break;
+    case ':':
+      resetFunc();
+      Serial1.print("Reset Initiated");
+      break;
+    }
+  }
+}
+
+void sequenceChooser() 
+{
+
+  switch (whatToDo) 
+  {
+    case '0':
+      FastLED.show();
+      break;
+    case '1':
+      rainbow();
+      FastLED.show();
+      break;
+    case '2':
+      rainbowWithGlitter();
+      FastLED.show();
+      break;
+    case '3':
+      fadeall();
+      FastLED.show();
+      break;
+    case '4':
+      confetti();
+      FastLED.show();
+      break;
+    case '5':
+      sinelon();
+      FastLED.show();
+      break;
+    case '6':
+      bpm();
+      FastLED.show();
+      break;
+    case '7':
+      juggle();
+      FastLED.show();
+      break;
+    case '8':
+      FillLEDsFromPaletteColors( startIndex);
+      SetupTotallyRandomPalette();
+      FastLED.show();
+      break;
+    case '9':
+      FillLEDsFromPaletteColors( startIndex);
+      SetupBlackAndWhiteStripedPalette();
+      FastLED.show();
+      break;
+    case 'a':
+      FillLEDsFromPaletteColors( startIndex);
+      SetupPurpleAndGreenPalette();
+      FastLED.show();
+      break;
+    case 'b':
+      FillLEDsFromPaletteColors( startIndex);
+      SetupWhiteAndCyanPalette();
+      FastLED.show();
+      break;
+    case 'c':
+      FillLEDsFromPaletteColors( startIndex);
+      SetupWhiteAndCyanPalette2();
+      FastLED.show();
+      break;
+    case 'd':
+      sinelon2();
+      FastLED.show();
+      break;
+    case 'e':
+      FillLEDsFromPaletteColors( startIndex);
+     SetupPurpleAndGreenPalette4();
+      FastLED.show();
+      break;
+    case 'f':
+      FillLEDsFromPaletteColors( startIndex);
+      SetupPurpleAndGreenPalette3();
+      FastLED.show();
+      break;
+    case 'g':
+      EVERY_N_SECONDS( millise ) { gHuee++; }
+      fill_solid(leds, NUM_LEDS, CHSV( gHuee , 255, 255));
+      break;
+    case 'h':
+      FillLEDsFromPaletteColors( startIndex);
+      SetupPurpleAndGreenPalette2();
+      FastLED.show();
+      break;
+  }
+}
+#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
+
+void rainbow() 
+{
+  // FastLED's built-in rainbow generator
+  fill_rainbow( leds, NUM_LEDS, gHue, 7);
+}
+
+void rainbowWithGlitter() 
+{
+  // built-in FastLED rainbow, plus some random sparkly glitter
+  rainbow();
+  addGlitter(80);
+}
+
+void addGlitter( fract8 chanceOfGlitter) 
+{
+  if( random8() < chanceOfGlitter) {
+    leds[ random16(NUM_LEDS) ] += CRGB::White;
+  }
+}
+
+void confetti() 
+{
+  // random colored speckles that blink in and fade smoothly
+  fadeToBlackBy( leds, NUM_LEDS, 10);
+  int pos = random16(NUM_LEDS);
+  leds[pos] += CHSV( gHue + random8(64), 200, 255);
+}
+
+void sinelon()
+{
+  // a colored dot sweeping back and forth, with fading trails
+  fadeToBlackBy( leds, NUM_LEDS, 3);
+  int pos = beatsin16( 1, 0, NUM_LEDS-1 );
+  leds[pos] += CHSV( gHue, 255, 192);
+}
+void sinelon2()
+{
+  // a colored dot sweeping back and forth, with fading trails
+  fadeToBlackBy( leds, NUM_LEDS, 3);
+  int pos = beatsin16( 1, 0, NUM_LEDS-1 );
+  leds[pos] += CRGB( 235, 239, 216);
+}
+void bpm()
+{
+  // colored stripes pulsing at a defined Beats-Per-Minute (BPM)
+  uint8_t BeatsPerMinute = 62;
+  CRGBPalette16 palette = PartyColors_p;
+  uint8_t beat = beatsin8( BeatsPerMinute, 64, 255);
+  for( int i = 0; i < NUM_LEDS; i++) { //9948
+    leds[i] = ColorFromPalette(palette, gHue+(i*2), beat-gHue+(i*10));
+  }
+}
+
+void juggle() {
+  // eight colored dots, weaving in and out of sync with each other
+  fadeToBlackBy( leds, NUM_LEDS, 20);
+  byte dothue = 0;
+  for( int i = 0; i < 8; i++) {
+    leds[beatsin16( i+7, 0, NUM_LEDS-1 )] |= CHSV(dothue, 200, 255);
+    dothue += 32;
+  }
+}
+
+void FillLEDsFromPaletteColors( uint8_t colorIndex)
+{
+    uint8_t brightness = 255;
+    
+    for( int i = 0; i < NUM_LEDS; i++) {
+        leds[i] = ColorFromPalette( currentPalette, colorIndex, brightness, currentBlending);
+        colorIndex += 3;
+    }
+}
+
+void SetupTotallyRandomPalette()
+{
+    for( int i = 0; i < 16; i++) {
+        currentPalette[i] = CHSV( random8(), 255, random8());
+    }
+}
+void SetupBlackAndWhiteStripedPalette()
+{
+    // 'black out' all 16 palette entries...
+    fill_solid( currentPalette, 16, CRGB::Black);
+    // and set every fourth one to white.
+    currentPalette[0] = CRGB::White;
+    currentPalette[4] = CRGB::White;
+    currentPalette[8] = CRGB::White;
+    currentPalette[12] = CRGB::White;
+    
+}
+void SetupPurpleAndGreenPalette()
+{
+    CRGB purple = CHSV( HUE_PURPLE, 255, 255);
+    CRGB green  = CHSV( HUE_GREEN, 255, 255);
+    CRGB black  = CRGB::Black;
+    
+    currentPalette = CRGBPalette16(
+                                   green,  green,  black,  black,
+                                   purple, purple, black,  black,
+                                   green,  green,  black,  black,
+                                   purple, purple, black,  black );
+}
+void SetupWhiteAndCyanPalette()
+{
+    // 'black out' all 16 palette entries...
+    fill_solid( currentPalette, 16, CRGB::Black);
+    // and set every fourth one to white.
+    currentPalette[0] = CRGB::White;
+    currentPalette[4] = CRGB::Cyan;
+    currentPalette[8] = CRGB::White;
+    currentPalette[12] = CRGB::Cyan;
+}
+void SetupWhiteAndCyanPalette2()
+{
+    // 'black out' all 16 palette entries...
+    fill_solid( currentPalette, 16, CRGB::Cyan);
+    // and set every fourth one to white.
+    currentPalette[0] = CRGB::White;
+    currentPalette[4] = CRGB::White;
+    currentPalette[8] = CRGB::White;
+    currentPalette[12] = CRGB::White;
+}
+void SetupWhiteAndCyanPalette3()
+{
+    // 'black out' all 16 palette entries...
+    fill_solid( currentPalette, 16, CRGB::Grey);
+    // and set every fourth one to white.
+    currentPalette[0] = CRGB::White;
+    currentPalette[4] = CRGB::White;
+    currentPalette[8] = CRGB::White;
+    currentPalette[12] = CRGB::White;
+}
+void SetupPurpleAndGreenPalette4()
+{
+    CRGB white = CRGB::White;
+    CRGB grey  = CRGB::Grey;
+    
+    currentPalette = CRGBPalette16(
+                                   white,  white,  white,  grey,
+                                   white, white, white,  grey,
+                                   white,  white,  white,  grey,
+                                   white, white, white,  grey );
+}
+void SetupPurpleAndGreenPalette3()
+{
+    CRGB white = CRGB::White;
+    CRGB black  = CRGB::Black;
+    
+    currentPalette = CRGBPalette16(
+                                   white,  white,  white,  black,
+                                   white, white, white,  black,
+                                   white,  white,  white,  black,
+                                   white, white, white,  black );
+}
+void SetupPurpleAndGreenPalette2()
+{
+    CRGB white = CRGB::White;
+    CRGB black  = CRGB::Black;
+    
+    currentPalette = CRGBPalette16(
+                                   black,  black,  black,  black,
+                                   black, black, black,  black,
+                                   black,  black,  black,  black,
+                                   black, black, black,  white );
+}
+void OneAlarm(){
+  fadecounter = 1;
+  fadeall();
+  Serial.println("its working");
+  
+}
